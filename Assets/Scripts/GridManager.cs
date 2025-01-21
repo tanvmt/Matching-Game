@@ -12,6 +12,7 @@ public class GridManager : MonoBehaviour
     Dictionary<Vector2, Tile> grid;
     List<Tile> clickedTiles;
     int[,] gridValue;
+
     void Start()
     {
         GenerateGrid();
@@ -21,7 +22,7 @@ public class GridManager : MonoBehaviour
     private void GenerateGrid()
     {
         grid = new Dictionary<Vector2, Tile>();
-        gridValue = new int[gridHeight, gridWidth];
+        gridValue = new int[gridHeight + 2, gridWidth + 2];
         int totalTiles = gridHeight * gridWidth;
         int tileTypes = tile.GetSpriteLength();
         List<int> tileCounts = GenerateRandomTileCounts(totalTiles, tileTypes);
@@ -37,14 +38,20 @@ public class GridManager : MonoBehaviour
 
         Shuffle(tilePool);
 
-        for (int i = 0; i < gridHeight; i++) {
-            for (int j = 0; j < gridWidth; j++){
-                int tileIndex = tilePool[0];
-                tilePool.RemoveAt(0);
-
-                grid[new Vector2(i, j)] = Instantiate(tile, new Vector3(j * tileSpace - gridWidth * tileSpace / 2 + tileSpace / 2, -(i * tileSpace - gridHeight * tileSpace / 2) - 0.8f, 0), Quaternion.identity);
+        for (int i = 0; i < gridHeight + 2; i++) {
+            for (int j = 0; j < gridWidth + 2; j++){
+                grid[new Vector2(i, j)] = Instantiate(tile, new Vector3(j * tileSpace - (gridWidth + 2) * tileSpace / 2 + tileSpace / 2, -(i * tileSpace - (gridHeight + 2) * tileSpace / 2) - 0.8f, 0), Quaternion.identity);
                 grid[new Vector2(i,j)].transform.parent = this.transform;
                 grid[new Vector2(i,j)].SetPosition(i, j);
+
+                if(i == 0 || i == gridHeight + 1 || j == 0 || j == gridWidth + 1){
+                    gridValue[i, j] = -1;
+                    grid[new Vector2(i,j)].gameObject.SetActive(false); 
+                    continue;
+                }
+
+                int tileIndex = tilePool[0];
+                tilePool.RemoveAt(0);
                 gridValue[i, j] = tileIndex;
                 grid[new Vector2(i,j)].GetSprite(tileIndex);
             }
@@ -92,7 +99,7 @@ public class GridManager : MonoBehaviour
             }
             else{
                 AddTileToClicked(clickedTile);
-                Invoke("IsSelectedTilesMatch", 1f);
+                IsSelectedTilesMatch();
             }
         }
     }
@@ -115,13 +122,13 @@ public class GridManager : MonoBehaviour
         }
 
         int shortestPath = BFSShortestPath(clickedTiles[0], clickedTiles[1]);
-        if(0<= shortestPath && shortestPath <= 3){
+        if(0<= shortestPath && shortestPath <= 2){
             DestroyObject(clickedTiles[0], clickedTiles[1]);
         }
 
-        if(AreOnEdge(clickedTiles[0], clickedTiles[1])){
-            DestroyObject(clickedTiles[0], clickedTiles[1]);
-        }
+        // if(AreOnEdge(clickedTiles[0], clickedTiles[1])){
+        //     DestroyObject(clickedTiles[0], clickedTiles[1]);
+        // }
 
         ResetClickedTiles();
     }
@@ -147,87 +154,102 @@ public class GridManager : MonoBehaviour
                 (tile1.GetY() == gridWidth - 1 && tile2.GetY() == gridWidth - 1); //bottom
     }
 
-    // private List<Vector2> GetPossibleDirections(Tile end, Tile current)
-    // {
-    //     List<Vector2> possibleDirections = new List<Vector2>();
-    //     Vector2[] directions = { new Vector2(0, 1), new Vector2(0, -1), new Vector2(1, 0), new Vector2(-1, 0) };
-
-    //     foreach (Vector2 direction in directions)
-    //     {
-    //         Vector2 neighbourPos = new Vector2(current.GetX(), current.GetY()) + direction;
-            
-    //         if (0<=neighbourPos.x && neighbourPos.x<gridWidth && 0<=neighbourPos.y && neighbourPos.y<gridHeight)
-    //         {
-    //             Debug.Log("Checking: " + neighbourPos.x + ", " + neighbourPos.y);
-    //             if(gridValue[(int)neighbourPos.x, (int)neighbourPos.y] == -1){
-    //                 possibleDirections.Add(neighbourPos);
-    //                 Debug.Log("Current: " + current.GetX() + ", " + current.GetY());
-    //                 Debug.Log("dỉrection: " + direction);
-    //                 Debug.Log("Possible direction: " + neighbourPos.x + ", " + neighbourPos.y);
-    //                 Debug.Log("-----------------");
-                    
-    //             }
-    //             if(neighbourPos == new Vector2(end.GetX(), end.GetY()) && gridValue[(int)neighbourPos.x, (int)neighbourPos.y] == gridValue[current.GetX(), current.GetY()]){
-    //                 possibleDirections.Add(neighbourPos);
-    //                 Debug.Log("Current: " + current.GetX() + ", " + current.GetY());
-    //                 Debug.Log("dỉrection: " + direction);
-    //                 Debug.Log("Possible direction: " + neighbourPos.x + ", " + neighbourPos.y);
-    //                 Debug.Log("-----------------");
-                    
-                    
-    //             }
-                
-    //         }
-    //     }
-    //     return possibleDirections;
-    // }
-
-    // public int BFSShortestPath(Tile start, Tile end){
-    //     Queue<Tile> queue = new Queue<Tile>();
-    //     Dictionary<Vector2, int> distance = new Dictionary<Vector2, int>();
-    //     queue.Enqueue(start);
-    //     distance[new Vector2(start.GetX(), start.GetY())] = 0;
-    //     Debug.Log("Start: " + start.GetX() + ", " + start.GetY());
-    //     while(queue.Count > 0){
-    //         Debug.Log("in while");
-    //         Tile current = queue.Dequeue();
-    //         if(current == end){
-    //             Debug.Log("Distance: " + distance[new Vector2(current.GetX(), current.GetY())]);
-    //             return distance[new Vector2(current.GetX(), current.GetY())];
-    //         }
-    //         List<Vector2> directions = GetPossibleDirections(end, current);
-    //         foreach(Vector2 direction in directions){
-    //             if(!distance.ContainsKey(direction)){
-    //                 distance[direction] = distance[new Vector2(current.GetX(), current.GetY())] + 1;
-    //                 queue.Enqueue(grid[direction]);
-    //             }
-    //         }
-    //     }
-    //     return -1;
-    // }
-
     private int BFSShortestPath(Tile start, Tile end){
         Queue<Tile> queue = new Queue<Tile>();
-        Dictionary<Vector2, int> distance = new Dictionary<Vector2, int>();
         queue.Enqueue(start);
-        distance[new Vector2(start.GetX(), start.GetY())] = 0;
+        Dictionary<Tile, int> visited = new Dictionary<Tile, int>();
+        Dictionary<Tile, Tile> parent = new Dictionary<Tile, Tile>();
+        Dictionary<Tile, Vector2> lastDirection = new Dictionary<Tile, Vector2>();
+        visited[start] = 0;
+
         while(queue.Count > 0){
             Tile current = queue.Dequeue();
             if(current == end){
-                return distance[new Vector2(current.GetX(), current.GetY())];
+                Debug.Log("Turn Count: " + visited[current]);
+                ShowPath(parent, start, end, visited);
+                ShowVisited(visited);
+                return visited[current];
             }
-            Vector2[] directions = { new Vector2(0, 1), new Vector2(0, -1), new Vector2(1, 0), new Vector2(-1, 0) };
-            foreach(Vector2 direction in directions){
-                Vector2 neighbourPos = new Vector2(current.GetX(), current.GetY()) + direction;
-                if (0<=neighbourPos.x && neighbourPos.x<gridWidth && 0<=neighbourPos.y && neighbourPos.y<gridHeight)
+
+            List<Tile> neighbours = GetNeighbours(current, end);
+            foreach(Tile neighbour in neighbours){
+                Vector2 currentDirection = new Vector2(neighbour.GetX() - current.GetX(), neighbour.GetY() - current.GetY());
+                int newCost = visited[current];
+
+                Debug.Log("--------------------");
+                Debug.Log("current: " + current.GetX() + ", " + current.GetY());
+                Debug.Log("currentDirection: " + currentDirection);
+                Debug.Log("neighbour: " + neighbour.GetX() + ", " + neighbour.GetY());
+                Debug.Log("newCost: " + newCost);
+                // Kiểm tra nếu có sự đổi hướng
+                if (lastDirection.ContainsKey(current) && lastDirection[current] != currentDirection)
                 {
-                    if(!distance.ContainsKey(neighbourPos) && (gridValue[(int)neighbourPos.x, (int)neighbourPos.y] == -1 || neighbourPos == new Vector2(end.GetX(), end.GetY()) && gridValue[(int)neighbourPos.x, (int)neighbourPos.y] == gridValue[current.GetX(), current.GetY()])){
-                        distance[neighbourPos] = distance[new Vector2(current.GetX(), current.GetY())] + 1;
-                        queue.Enqueue(grid[neighbourPos]);
-                    }
+                    newCost += 1;
+                    Debug.Log("Change direction");
                 }
+
+                if (!visited.ContainsKey(neighbour) || newCost < visited[neighbour])
+                {
+                    visited[neighbour] = newCost;
+                    queue.Enqueue(neighbour);
+                    parent[neighbour] = current;
+                    lastDirection[neighbour] = currentDirection;
+                    // Debug.Log("Parent of " + neighbour.GetX() + ", " + neighbour.GetY() + " is " + current.GetX() + ", " + current.GetY());
+                }
+                Debug.Log("--------------------");
             }
         }
+
+        
+
         return -1;
     }
+
+    private void ShowVisited(Dictionary<Tile, int> visited)
+    {
+        foreach (KeyValuePair<Tile, int> entry in visited)
+        {
+            Debug.Log("Visited: " + entry.Key.GetX() + ", " + entry.Key.GetY() + " " + entry.Value);
+        }
+    }
+
+    private void ShowPath(Dictionary<Tile, Tile> parent, Tile start, Tile end, Dictionary<Tile, int> visited){
+        Tile current = end;
+        Debug.Log("Path: " + current.GetX() + ", " + current.GetY() + " " + visited[current]);
+        while(current != start){
+            current = parent[current];
+            Debug.Log("Path: " + current.GetX() + ", " + current.GetY() + " " + visited[current]);
+        }
+    }
+
+    private List<Tile> GetNeighbours(Tile current, Tile end){
+        List<Tile> neighbours = new List<Tile>();
+        Vector2[] directions = { new Vector2(-1, 0), new Vector2(1, 0), new Vector2(0, -1), new Vector2(0, 1) };
+
+        foreach (Vector2 direction in directions){
+            Vector2 neighbourPos = new Vector2(current.GetX(), current.GetY()) + direction;
+            // Debug.Log("--------------------");
+            // Debug.Log("current: " + current.GetX() + ", " + current.GetY());
+            // Debug.Log("direction: " + direction);
+            // Debug.Log("neighbourPos: " + neighbourPos);
+            // Debug.Log("--------------------");
+            
+
+            if(neighbourPos.x < 0 || neighbourPos.x > gridHeight + 1 || neighbourPos.y < 0 || neighbourPos.y > gridWidth + 1){
+                continue;
+            }
+
+            if(grid[neighbourPos] == end){
+                neighbours.Add(end);
+                return neighbours;
+            }
+            if (grid.ContainsKey(neighbourPos) && gridValue[(int)neighbourPos.x, (int)neighbourPos.y] == -1){
+                neighbours.Add(grid[neighbourPos]);
+            }
+        }
+
+        return neighbours;
+    }
+
+    
 }
