@@ -37,7 +37,7 @@ public class Tile : MonoBehaviour
 
     private void OnMouseDown() {
         gridManager.TileClicked(this);
-        Debug.Log("Tile clicked: " + x + ", " + y);
+        // Debug.Log("Tile clicked: " + x + ", " + y);
     }
 
     public void ToggleHighlight(bool enable) {
