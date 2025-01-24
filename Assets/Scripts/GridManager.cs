@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.ComponentModel.Design;
+using Unity.VisualScripting;
 using UnityEngine;
 
 public class GridManager : MonoBehaviour
@@ -58,7 +59,7 @@ public class GridManager : MonoBehaviour
             //     ClearGrid();
             // }
         }
-        ShowTiles();
+        // ShowTiles();
         
     }
 
@@ -87,7 +88,7 @@ public class GridManager : MonoBehaviour
         foreach(KeyValuePair<int, List<Tile>> entry in tilesOfType){
             for(int i=0;i<entry.Value.Count;i++){
                 for(int j=i+1;j<entry.Value.Count;j++){
-                    if(BFSShortestPath(entry.Value[i], entry.Value[j]) <= 2){
+                    if(FindOptimalPath(entry.Value[i], entry.Value[j]) != null){
                         return true;
                     }
                 }
@@ -108,13 +109,13 @@ public class GridManager : MonoBehaviour
         for (int i = 0; i < gridHeight + 2; i++) {
             for (int j = 0; j < gridWidth + 2; j++){
                 grid[new Vector2(i, j)] = Instantiate(tile, new Vector3(j * tileSpace - (gridWidth + 2) * tileSpace / 2 + tileSpace / 2, -(i * tileSpace - (gridHeight + 2) * tileSpace / 2) - 0.8f, 0), Quaternion.identity);
-                grid[new Vector2(i,j)].gameObject.SetActive(false);
+                
                 grid[new Vector2(i,j)].transform.parent = this.transform;
                 grid[new Vector2(i,j)].SetPosition(i, j);
 
                 if(i == 0 || i == gridHeight + 1 || j == 0 || j == gridWidth + 1){
                     gridValue[i, j] = -1;
-                     
+                     grid[new Vector2(i,j)].gameObject.SetActive(false);
                     continue;
                 }
 
@@ -199,8 +200,8 @@ public class GridManager : MonoBehaviour
             return;
         }
 
-        int shortestPath = BFSShortestPath(clickedTiles[0], clickedTiles[1]);
-        if(0<= shortestPath && shortestPath <= 2){
+        
+        if(FindOptimalPath(clickedTiles[0], clickedTiles[1]) != null){
             DestroyObjects(clickedTiles[0], clickedTiles[1]);
             if(!AreThereAnyMatches()){
                 GenerateGrid();
@@ -230,53 +231,100 @@ public class GridManager : MonoBehaviour
         clickedTiles.Clear();
     }
 
-    private int BFSShortestPath(Tile start, Tile end){
-        Queue<Tile> queue = new Queue<Tile>();
-        queue.Enqueue(start);
-        Dictionary<Tile, int> visited = new Dictionary<Tile, int>();
-        Dictionary<Tile, Tile> parent = new Dictionary<Tile, Tile>();
-        Dictionary<Tile, Vector2> lastDirection = new Dictionary<Tile, Vector2>();
-        visited[start] = 0;
-        lastDirection[start] = new Vector2(0, 0);
+    private List<Tile> FindOptimalPath(Tile start, Tile end)
+    {
+        // Tìm tất cả các đường đi
+        List<List<Tile>> allPaths = BFSFindAllPaths(start, end);
+
+        // Chọn đường đi có ít lần đổi hướng
+        List<Tile> optimalPath = GetOptimalPath(allPaths);
+        
+
+        return optimalPath;
+    }
+
+    private List<List<Tile>> BFSFindAllPaths(Tile start, Tile end)
+    {
+        Queue<List<Tile>> queue = new Queue<List<Tile>>();
+        queue.Enqueue(new List<Tile> { start });
+        List<List<Tile>> allPaths = new List<List<Tile>>();
         while(queue.Count > 0){
-            Tile current = queue.Dequeue();
+            List<Tile> path = queue.Dequeue();
+            Tile current = path[path.Count - 1];
+
+            if (CountDirectionChanges(path) > 2) {
+                continue;
+            }
+
             if(current == end){
-                Debug.Log("Turn Count: " + visited[current]);
-                // ShowPath(parent, start, end, visited);
-                // ShowVisited(visited);
-                return visited[current];
+                allPaths.Add(path);
+                continue;
             }
 
             List<Tile> neighbours = GetNeighbours(current, end);
             foreach(Tile neighbour in neighbours){
-                Vector2 currentDirection = lastDirection[current];
-                Vector2 nextDirection = new Vector2(neighbour.GetX() - current.GetX(), neighbour.GetY() - current.GetY());
-                int newCost = visited[current];
-
-                // Debug.Log("--------------------");
-                // Debug.Log("current: " + current.GetX() + ", " + current.GetY());
-                // Debug.Log("currentDirection: " + currentDirection);
-                // Debug.Log("neighbour: " + neighbour.GetX() + ", " + neighbour.GetY());
-                // Debug.Log("newCost: " + newCost);
-                // Kiểm tra nếu có sự đổi hướng
-                if(currentDirection != nextDirection && currentDirection != new Vector2(0, 0)){
-                    newCost++;
+                if(!path.Contains(neighbour)){
+                    List<Tile> newPath = new List<Tile>(path);
+                    newPath.Add(neighbour);
+                    queue.Enqueue(newPath);
                 }
-
-                if(!visited.ContainsKey(neighbour) || newCost < visited[neighbour]){
-                    visited[neighbour] = newCost;
-                    parent[neighbour] = current;
-                    lastDirection[neighbour] = nextDirection;
-                    queue.Enqueue(neighbour);
-                }
-                // Debug.Log("--------------------");
             }
         }
 
-        
-
-        return -1;
+        return allPaths; // Trả về tất cả các đường đi
     }
+
+
+
+    private List<Tile> GetOptimalPath(List<List<Tile>> allPaths)
+{
+    List<Tile> optimalPath = null;
+    int minTurns = int.MaxValue;
+
+    foreach (var path in allPaths)
+    {
+        int turns = CountDirectionChanges(path);
+        if (turns < minTurns)
+        {
+            minTurns = turns;
+            optimalPath = path;
+        }
+    }
+
+    // Hiển thị đường đi tối ưu
+    if (optimalPath != null)
+    {
+        string optimalPathLog = "Optimal Path: ";
+        foreach (Tile tile in optimalPath)
+        {
+            optimalPathLog += $"({tile.GetX()}, {tile.GetY()}) -> ";
+        }
+        Debug.Log(optimalPathLog); // Hiển thị đường đi tối ưu trên console
+        Debug.Log("Number of turns: " + minTurns); // Hiển thị số lần đổi hướng trên console
+    }
+
+    return optimalPath;
+}
+
+
+    private int CountDirectionChanges(List<Tile> path)
+    {
+        int turns = 0;
+        Vector2? previousDirection = null;
+
+        for (int i = 1; i < path.Count; i++)
+        {
+            Vector2 currentDirection = new Vector2(path[i].GetX() - path[i - 1].GetX(), path[i].GetY() - path[i - 1].GetY());
+            if (previousDirection != null && previousDirection != currentDirection)
+            {
+                turns++;
+            }
+            previousDirection = currentDirection;
+        }
+
+        return turns;
+    }
+
 
     private void ShowVisited(Dictionary<Tile, int> visited)
     {
@@ -323,6 +371,8 @@ public class GridManager : MonoBehaviour
 
         return neighbours;
     }
+
+
 
     
 }
