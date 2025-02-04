@@ -10,20 +10,30 @@ public class GridManager : MonoBehaviour
     [SerializeField] int gridWidth;
     [SerializeField] int gridHeight;
     [SerializeField] float tileSpace;
+    [SerializeField] GameObject lineObject;
+    [SerializeField] float clearLineDelay = 0.1f;
+    [SerializeField] float lineOffset = 0.5f;
     Dictionary<Vector2, Tile> grid;
     Dictionary<int, List<Tile>> tilesOfType;
     List<int> tilePool;
     List<Tile> clickedTiles;
     int[,] gridValue;
+    UIDisplay UI;
 
     void Start()
     {
-        InitiallizeGrid();
+        LoadGame();
+        
+    }
+
+    public void LoadGame(){
+        UI = FindObjectOfType<UIDisplay>();
+        InitializeGrid();
         GenerateGrid();
         clickedTiles = new List<Tile>();
     }
 
-    private void InitiallizeGrid(){
+    private void InitializeGrid(){
         grid = new Dictionary<Vector2, Tile>();
         gridValue = new int[gridHeight + 2, gridWidth + 2];
         tilesOfType = new Dictionary<int, List<Tile>>();
@@ -40,7 +50,7 @@ public class GridManager : MonoBehaviour
             }
         }
     }
-    private void GenerateGrid()
+    public void GenerateGrid()
     {
         bool validGrid = false;
         while (!validGrid)
@@ -99,19 +109,39 @@ public class GridManager : MonoBehaviour
 
     private void ClearGrid(){
         foreach(KeyValuePair<Vector2, Tile> entry in grid){
-            Destroy(entry.Value.gameObject);
+            if(entry.Value != null){
+                Destroy(entry.Value.gameObject);
+            }
         }
         grid.Clear();
         tilesOfType.Clear();
     }
 
     public void SpawnTiles(List<int> tilePool){
+        // Lấy thông tin về chiều rộng và chiều cao của camera
+        float screenWidth = Camera.main.orthographicSize * 2.0f * Screen.width / Screen.height;
+        float screenHeight = Camera.main.orthographicSize * 2.0f;
+
+        // Tính toán kích thước ô dựa trên không gian hiển thị
+        float tileWidth = (screenWidth - 2) / (gridWidth + 1);
+        float tileHeight = (screenHeight - 3) / (gridHeight + 1);
+
+        // Sử dụng giá trị nhỏ hơn giữa tileWidth và tileHeight để đảm bảo ô vuông
+        float tileSize = Mathf.Min(tileWidth, tileHeight);
+
+        // Khoảng cách giữa các tile (có thể điều chỉnh giá trị này để thêm khoảng cách)
+        float tileSpacing = tileSize * 0.1f; // 10% của kích thước tile
         for (int i = 0; i < gridHeight + 2; i++) {
             for (int j = 0; j < gridWidth + 2; j++){
-                grid[new Vector2(i, j)] = Instantiate(tile, new Vector3(j * tileSpace - (gridWidth + 2) * tileSpace / 2 + tileSpace / 2, -(i * tileSpace - (gridHeight + 2) * tileSpace / 2) - 0.8f, 0), Quaternion.identity);
-                
+                // Tính toán vị trí của tile
+                float xPos = j * tileSize - (gridWidth * tileSize / 2);
+                float yPos = -(i * tileSize - (gridHeight * tileSize / 2));
+
+                // Instantiate tile và thiết lập vị trí
+                grid[new Vector2(i, j)] = Instantiate(tile, new Vector3(xPos, yPos, 0), Quaternion.identity);
                 grid[new Vector2(i,j)].transform.parent = this.transform;
-                grid[new Vector2(i,j)].SetPosition(i, j);
+                grid[new Vector2(i,j)].SetPositionOnGrid(i, j);
+                grid[new Vector2(i,j)].SetPositionOnScene(grid[new Vector2(i,j)].transform.position.x, grid[new Vector2(i,j)].transform.position.y);
 
                 if(i == 0 || i == gridHeight + 1 || j == 0 || j == gridWidth + 1){
                     gridValue[i, j] = -1;
@@ -120,6 +150,7 @@ public class GridManager : MonoBehaviour
                 }
 
                 if(gridValue[i, j] == -1){
+                    grid[new Vector2(i,j)].gameObject.SetActive(false);
                     continue;
                 }
 
@@ -200,9 +231,12 @@ public class GridManager : MonoBehaviour
             return;
         }
 
-        
-        if(FindOptimalPath(clickedTiles[0], clickedTiles[1]) != null){
+        List<Tile> path = FindOptimalPath(clickedTiles[0], clickedTiles[1]);
+        if(path != null){
+            DrawLine(path);
+            Invoke("ClearLines", clearLineDelay);
             DestroyObjects(clickedTiles[0], clickedTiles[1]);
+            UI.AddToScore(10);
             if(!AreThereAnyMatches()){
                 GenerateGrid();
             }
@@ -234,7 +268,7 @@ public class GridManager : MonoBehaviour
     private List<Tile> FindOptimalPath(Tile start, Tile end)
     {
         // Tìm tất cả các đường đi
-        List<List<Tile>> allPaths = BFSFindAllPaths(start, end);
+        Dictionary<int, List<List<Tile>>> allPaths = BFSFindAllPaths(start, end);
 
         // Chọn đường đi có ít lần đổi hướng
         List<Tile> optimalPath = GetOptimalPath(allPaths);
@@ -243,11 +277,12 @@ public class GridManager : MonoBehaviour
         return optimalPath;
     }
 
-    private List<List<Tile>> BFSFindAllPaths(Tile start, Tile end)
+    private Dictionary<int, List<List<Tile>>> BFSFindAllPaths(Tile start, Tile end)
     {
         Queue<List<Tile>> queue = new Queue<List<Tile>>();
         queue.Enqueue(new List<Tile> { start });
-        List<List<Tile>> allPaths = new List<List<Tile>>();
+        // List<List<Tile>> allPaths = new List<List<Tile>>();
+        Dictionary<int, List<List<Tile>>> allPaths = new Dictionary<int, List<List<Tile>>>();
         while(queue.Count > 0){
             List<Tile> path = queue.Dequeue();
             Tile current = path[path.Count - 1];
@@ -257,7 +292,12 @@ public class GridManager : MonoBehaviour
             }
 
             if(current == end){
-                allPaths.Add(path);
+                // allPaths.Add(path);
+                int turns = CountDirectionChanges(path);
+                if(!allPaths.ContainsKey(turns)){
+                    allPaths[turns] = new List<List<Tile>>();
+                }
+                allPaths[turns].Add(path);
                 continue;
             }
 
@@ -276,35 +316,48 @@ public class GridManager : MonoBehaviour
 
 
 
-    private List<Tile> GetOptimalPath(List<List<Tile>> allPaths)
-{
-    List<Tile> optimalPath = null;
-    int minTurns = int.MaxValue;
-
-    foreach (var path in allPaths)
+    private List<Tile> GetOptimalPath(Dictionary<int, List<List<Tile>>> allPaths)
     {
-        int turns = CountDirectionChanges(path);
-        if (turns < minTurns)
-        {
-            minTurns = turns;
-            optimalPath = path;
-        }
-    }
+        List<Tile> optimalPath = null;
+        int minTurns = int.MaxValue;
 
-    // Hiển thị đường đi tối ưu
-    if (optimalPath != null)
-    {
-        string optimalPathLog = "Optimal Path: ";
-        foreach (Tile tile in optimalPath)
-        {
-            optimalPathLog += $"({tile.GetX()}, {tile.GetY()}) -> ";
-        }
-        Debug.Log(optimalPathLog); // Hiển thị đường đi tối ưu trên console
-        Debug.Log("Number of turns: " + minTurns); // Hiển thị số lần đổi hướng trên console
-    }
+        // foreach (var path in allPaths)
+        // {
+        //     int turns = CountDirectionChanges(path);
+        //     if (turns < minTurns)
+        //     {
+        //         minTurns = turns;
+        //         optimalPath = path;
+        //     }
+        // }
 
-    return optimalPath;
-}
+        if(allPaths.ContainsKey(0)){
+            optimalPath = allPaths[0][0];
+            minTurns = 0;
+        }
+        else if(allPaths.ContainsKey(1)){
+            optimalPath = allPaths[1][0];
+            minTurns = 1;
+        }
+        else if(allPaths.ContainsKey(2)){
+            optimalPath = allPaths[2][0];
+            minTurns = 2;
+        }
+
+        // Hiển thị đường đi tối ưu
+        if (optimalPath != null)
+        {
+            string optimalPathLog = "Optimal Path: ";
+            foreach (Tile tile in optimalPath)
+            {
+                optimalPathLog += $"({tile.GetX()}, {tile.GetY()}) -> ";
+            }
+            Debug.Log(optimalPathLog); // Hiển thị đường đi tối ưu trên console
+            Debug.Log("Number of turns: " + minTurns); // Hiển thị số lần đổi hướng trên console
+        }
+
+        return optimalPath;
+    }
 
 
     private int CountDirectionChanges(List<Tile> path)
@@ -323,24 +376,6 @@ public class GridManager : MonoBehaviour
         }
 
         return turns;
-    }
-
-
-    private void ShowVisited(Dictionary<Tile, int> visited)
-    {
-        foreach (KeyValuePair<Tile, int> entry in visited)
-        {
-            Debug.Log("Visited: " + entry.Key.GetX() + ", " + entry.Key.GetY() + " " + entry.Value);
-        }
-    }
-
-    private void ShowPath(Dictionary<Tile, Tile> parent, Tile start, Tile end, Dictionary<Tile, int> visited){
-        Tile current = end;
-        Debug.Log("Path: " + current.GetX() + ", " + current.GetY() + " " + visited[current]);
-        while(current != start){
-            current = parent[current];
-            Debug.Log("Path: " + current.GetX() + ", " + current.GetY() + " " + visited[current]);
-        }
     }
 
     private List<Tile> GetNeighbours(Tile current, Tile end){
@@ -372,7 +407,38 @@ public class GridManager : MonoBehaviour
         return neighbours;
     }
 
+    private void DrawLine(List<Tile> path){
+        Quaternion quaternion = Quaternion.identity;
+        for(int i = 0;i < path.Count - 1;i++){
+            Vector3 currentPos = new Vector3(path[i].getPosX(), path[i].getPosY(), 0);
+            switch (new Vector2(path[i + 1].GetX(), path[i + 1].GetY()) - new Vector2(path[i].GetX(), path[i].GetY()))
+            {
+                case Vector2 v when v == new Vector2(-1, 0): // Up              
+                    currentPos.y += lineOffset;
+                    quaternion = Quaternion.Euler(0, 0, 0);
+                    break;
+                case Vector2 v when v == new Vector2(1, 0): // Down
+                    currentPos.y -= lineOffset;
+                    quaternion = Quaternion.Euler(0, 0, 0);
+                    break;
+                case Vector2 v when v == new Vector2(0, -1): // Left
+                    currentPos.x -= lineOffset;
+                    quaternion = Quaternion.Euler(0, 0, 90);
+                    break;
+                case Vector2 v when v == new Vector2(0, 1): // Right
+                    currentPos.x += lineOffset;
+                    quaternion = Quaternion.Euler(0, 0, 90);
+                    break;
+            }
+            GameObject line = Instantiate(lineObject, currentPos, quaternion);
+        }
+    }
 
-
+    private void ClearLines(){
+        GameObject[] lines = GameObject.FindGameObjectsWithTag("Line");
+        foreach(GameObject line in lines){
+            Destroy(line);
+        }
+    }
     
 }
