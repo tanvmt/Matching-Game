@@ -10,9 +10,11 @@ public class Tile : MonoBehaviour
     private GridManager gridManager;
     private int x, y;
     private float posX, posY;
-    
-    private void Start() {
+
+    private void Start()
+    {
         gridManager = FindObjectOfType<GridManager>();
+        canClicked = true;
     }
 
     public void SetPositionOnGrid(int x, int y){
